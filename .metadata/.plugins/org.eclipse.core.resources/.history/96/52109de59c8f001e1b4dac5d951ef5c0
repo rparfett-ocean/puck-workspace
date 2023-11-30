@@ -1,0 +1,144 @@
+// Camera.h
+// Driver for the Spine Camera
+
+#include <stdint.h>
+#include "Timer.h"
+#include "Camera.h"
+#include "dac.h"
+#include "sensor.h"
+
+#define CHFPGA_READ_ADDR                (0x65)
+#define CHFPGA_WRITE_ADDR               (0x64)
+#define CHFPGA_SUBADDR_LENGTH			(0x01)
+#define LIGHT_ON_BIT           			(0x03)
+
+#define EXP_MAX                         (10000)
+#define EXP_MIN                         (0)
+
+static bool m_busy = false;
+static bool m_lightSourceIsEn = false;
+static uint32_t m_exposurePct;
+static uint32_t m_ledBrightness = 100;
+
+bool Camera_writeFpgaReg( uint8_t addr, uint8_t data )
+{
+    uint8_t abuf[ sizeof(addr) + sizeof(data) ];
+
+    if( m_busy )
+    {
+        return false;
+    }
+	abuf[ 0 ] = addr;
+    abuf[ 1 ] = data;
+    return true;
+}
+
+bool Camera_readFpgaRegBlocking( uint8_t addr, uint8_t *data )
+{
+    uint8_t abuf[ sizeof(addr) ];
+
+    if( m_busy )
+    {
+        return false;
+    }
+
+    m_busy = true;
+	abuf[ 0 ] = addr;
+
+    m_busy = false;
+    return false;
+}
+
+bool Camera_readCurrentFpgaRegBlocking( uint8_t *data )
+{
+
+    if( m_busy )
+    {
+        return false;
+    }
+
+    m_busy = true;
+
+
+    m_busy = false;
+    return false;
+}
+
+bool Camera_lightSourceEn( bool en )
+{
+    m_lightSourceIsEn = en;
+    return en;
+}
+
+bool Camera_lightSourceIsEn( void )
+{
+    return m_lightSourceIsEn;
+}
+
+bool Camera_lightSourceSet( uint32_t percent )
+{
+	m_ledBrightness = percent;
+	DAC_writePct( percent );
+	return true;
+}
+
+uint32_t Camera_lightSourceGet(void)
+{
+	return m_ledBrightness;
+}
+
+bool Camera_increaseExposure( uint32_t deltaPct )
+{
+    if( ( EXP_MAX - m_exposurePct ) <= deltaPct ) {
+        m_exposurePct = EXP_MAX;
+    } else {
+        m_exposurePct += deltaPct;
+    }
+    return Camera_setExposure( m_exposurePct );
+}
+
+bool Camera_decreaseExposure( uint32_t deltaPct )
+{
+    if( ( m_exposurePct - EXP_MIN ) >= deltaPct ) {
+        m_exposurePct -= deltaPct;
+    } else {
+        m_exposurePct = EXP_MIN;
+    }
+    return Camera_setExposure( m_exposurePct );
+}
+
+bool Camera_setExposure( uint32_t expPct )
+{
+    bool result = false;
+    SENSOR_RESULT_T sns;
+
+#if INCLUDE_GAIN
+    sns = Sensor_setExposure( expPct );   // a ERR_ANALOG_GAIN_MIN  indicates that we are at 1.0 analog gain, time to use the LEDs
+#endif
+
+    switch( sns ) {
+        case RSLT_ANALOG_GAIN_MIN :
+            #if !__USE_INTEGRATION_TIME__
+                // Sensor has set the analog gain to 1.0
+                // Now reduce the LEDS to go lower
+                Camera_lightSourceSet( expPct / 33 );
+                break;
+            #endif
+        case RSLT_ERR_COMMS :
+        case RSLT_ERR_RANGE_HIGH :
+        case RSLT_ERR_RANGE_LOW :
+            result = false;
+            break;
+        case RSLT_OK :      
+            #if !__USE_INTEGRATION_TIME__
+                // since we are by definition out of the LED range, max out the LEDs
+                Camera_lightSourceSet( 10000 ); // 100% 
+            #endif
+                result = true;
+            break;
+        default :
+            result = false;
+            break;
+    }
+    return result;
+}

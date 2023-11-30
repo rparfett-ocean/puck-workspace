@@ -1,0 +1,23 @@
+/******************************************************************************
+*
+*
+******************************************************************************/
+
+/*
+ * I2C.f
+ *
+ */
+
+#ifndef __I2C_H__
+#define __I2C_H__
+
+#include <stdint.h>
+#include <stdbool.h>
+
+bool I2C_init( void );
+
+bool I2C_send( uint8_t devAddr, uint32_t length, uint8_t *buf );
+
+bool I2C_recv( uint8_t devAddress, uint32_t subAddrLength, uint8_t *subAddr, uint32_t dataLength, uint8_t *data );
+
+#endif

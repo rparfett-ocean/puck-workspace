@@ -1,0 +1,231 @@
+/* Copyright (c) 2018 Depuy Synthes All rights reserved. */
+
+#include "xparameters.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include "Registers.h"
+#include "CHUtils.h"
+#include "Timer.h"
+#include "sensor.h"
+#include "mask.h"
+#include "Camera.h"
+#include "platform.h"
+#include "sleep.h"
+#include "xil_printf.h"
+#include "color.h"
+
+/**
+ * @defgroup CHUtils_Prvt Sensor Utilites - Private 
+ * @ingroup SensorUtils
+ *
+ * 
+ */
+/*@{*/
+
+/********************************* Private Definitions ************************/
+
+#define LS_LEVEL_MIN    (0)
+#define LS_LEVEL_MAX    (100)
+
+/** the current brightness level */
+static int8_t m_brightnessLevel;
+
+/** lightsource on/off status */
+static bool m_lightOn;
+
+/** 
+ * Camera head connected
+*/
+static bool m_isCHConnected;
+
+static int m_cameraType;
+
+static uint8_t  m_clockPos;
+
+
+static uint8_t  m_exposure;
+
+/********************************* Private Functions **************************/
+
+bool CHUtils_turnLSOff( void );
+
+/*@}*/
+
+/********************************* Implementation *****************************/
+void CHUtils_init( void )
+{
+    m_cameraType = 0;
+    m_brightnessLevel = 0;
+    m_isCHConnected = true;
+    m_clockPos = 6;
+    m_exposure = 35;            // LRE
+
+    // start with lightsource off
+    m_lightOn = false;
+ //   Color_init();
+    Sensor_init( 0, 0 );
+    // module successfully initialized
+}
+
+void CHUtils_setCamHeadState(bool connected)
+{
+    m_isCHConnected = connected;
+    if( !connected ) {
+        m_cameraType =  0;
+    }
+}
+
+bool CHUtils_getCamHeadAttached(void)
+{
+    return true;
+}
+
+bool CHUtils_setLSState( bool force )
+{
+    m_lightOn = force;
+    Camera_lightSourceEn( force );
+    return( m_lightOn );
+}
+
+bool CHUtils_turnLSOff( void )
+{
+    return m_lightOn = Camera_lightSourceEn( false );
+}
+
+bool CHUtils_setLSLevel( uint8_t level )
+{
+    //check for valid level
+    m_brightnessLevel = level > LS_LEVEL_MAX ? LS_LEVEL_MAX : level;
+
+    if( m_brightnessLevel == 0 ) {
+        CHUtils_setLSState( false );
+    }
+    else {
+        CHUtils_setLSState( true );
+    }
+
+    // specified level within the valid range
+    return Camera_lightSourceSet( m_brightnessLevel );
+}
+
+bool CHUtils_getLSState( void )
+{
+    return m_lightOn;
+}
+
+uint8_t CHUtils_getLSLevel( void )
+{
+    //return brightness level
+    return  m_brightnessLevel;
+}
+
+bool CHUtils_toggleLSOnOff( void )
+{
+//    m_lightOn ^= true;
+    return CHUtils_setLSState( m_lightOn ^ true );
+}
+
+bool CHUtils_startISP2( )
+{
+    Mask_setActive( LIVE_VIDEO );
+    return true;
+}
+
+bool CHUtils_liveVideo()
+{
+	tDramMode mode;
+	mode.u32 = 0;
+	mode.bits.osd_dram_rd_en = 1;
+	mode.bits.sensor_dram_wr_en = 1;
+	mode.bits.video_dram_rd_en = 1;
+
+    Mask_setActive( LIVE_VIDEO );
+ 	Xil_Out32( REG_AXI_MASTER_WR_EN, CAMERA_VIDEO );
+ 	Xil_Out32( REG_AXI_FSM_EN, mode.u32 );
+    return true;
+}
+
+bool CHUtils_colorBars()
+{
+	Xil_Out32( REG_AXI_MASTER_WR_EN, INTERNAL_VIDEO );
+    Mask_setActive( TEST_PATTERN );
+    return true;
+}
+
+bool CHUtils_setExposure( uint8_t expPct )
+{
+    m_exposure = expPct;
+    uint32_t val32 = ((uint32_t)expPct * 56)/100 + 15;    // translate slider 0-100 to 15-66
+#if INCLUDE_GAIN
+    Sensor_setExposure( val32 * ONE_PERCENT );
+#endif
+    return true;
+}
+
+uint8_t CHUtils_getExposure(void)
+{
+    return m_exposure;
+}
+
+void CHUtils_setRotationClock( int clock )
+{
+	tRotateSel rot;
+	int ind = 0;
+	int shft = 0;
+
+    if( m_isCHConnected ) {
+    	switch( clock ) {
+    		case 12 :
+    		case 0:
+    		case 1:
+    		case 11:
+    			rot = DEG_270;
+    			shft = 0x00;
+    			ind = 12;
+    			break;
+    		case 3 :
+    		case 2 :
+    		case 4 :
+    			rot = DEG_0;
+    			shft = 0x02;
+    			ind = 3;
+    			break;
+    		case 6 :
+    		case 5 :
+    		case 7:
+    		default :
+    			ind = 6;
+    			shft = 0x02;
+    			rot = DEG_180;
+    			break;
+    		case 9 :
+    		case 8 :
+    		case 10:
+    			ind = 9;
+    			shft = 0x02;
+    			rot = DEG_90;
+    			break;
+    	}
+		Xil_Out32( REG_ROTATE_SEL, rot );
+//			Xil_Out32( REG_ROT_HORIZ_PIX_SHIFT, shft );
+//		Mask_rotationIndicator( ind );
+    }
+    //If CH not connected rotation will be set on connection. 
+    m_clockPos = ind;
+
+}
+
+uint8_t CHUtils_getRotationClockPos( void )
+{
+    return m_clockPos;
+}
+
+
+void CHUtils_setBlueArrowLed( bool state )
+{
+}
+
+void CHUtils_camPower( bool ena )
+{
+	Xil_Out32( REG_CAMHEAD_PWR_EN, (uint32_t)ena );
+}

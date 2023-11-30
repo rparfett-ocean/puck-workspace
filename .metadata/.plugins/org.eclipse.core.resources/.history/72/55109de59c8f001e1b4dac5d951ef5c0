@@ -1,0 +1,98 @@
+/******************************************************************************
+*
+*
+******************************************************************************/
+
+/*
+ * I2C.c
+ *
+ */
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xiicps.h"
+
+#define IIC_ps 				XPAR_XIICPS_0_DEVICE_ID
+#define IIC_SCLK_RATE		(100000)
+#define SW_IIC_ADDR         (0x75)
+
+#define I2C_CHAN_0			(0x01)
+
+XIicPs  m_i2cBus;
+
+static void I2C_waitFree();
+
+static void I2C_waitFree()
+{
+    while( XIicPs_BusIsBusy( &m_i2cBus ) );     // wait for bus to be free
+}
+
+bool I2C_init( void )
+{
+	XIicPs_Config *Config;
+	uint8_t	chr;
+
+	/*
+	 * Initialize the IIC driver so that it's ready to use
+	 * Look up the configuration in the config table, then initialize it.
+	 */
+
+	do {
+		Config = XIicPs_LookupConfig(IIC_ps);
+		if (NULL == Config) {
+			break;
+		}
+
+		if( XST_SUCCESS != XIicPs_CfgInitialize(&m_i2cBus, Config, Config->BaseAddress) ) {
+			break;
+		}
+
+		/*
+		* Perform a self-test.
+		*/
+		if( XST_SUCCESS != XIicPs_SelfTest(&m_i2cBus) ) {
+			break;
+		}
+
+		XIicPs_SetSClk(&m_i2cBus, IIC_SCLK_RATE);
+
+		// set up the bus multiplexer for the correct channel
+		chr = I2C_CHAN_0;
+		if( XST_SUCCESS != XIicPs_MasterSendPolled(&m_i2cBus, &chr, 1, SW_IIC_ADDR) ) {
+			break;
+		}
+		return true;
+	} while(0);
+	return false;
+}
+
+bool I2C_send( uint8_t devAddr, uint32_t length, uint8_t *buf )
+{
+	I2C_waitFree();
+	return ( XST_SUCCESS == XIicPs_MasterSendPolled( &m_i2cBus, buf, length, devAddr ) );
+}
+
+bool I2C_recv( uint8_t devAddress, uint32_t subAddrLength, uint8_t *subAddr, uint32_t dataLength, uint8_t *data )
+{
+	uint8_t dummySubAddr = 0;
+	if( !subAddr ) {
+		subAddr = &dummySubAddr;
+	}
+	
+	I2C_waitFree();
+    do {
+        if( XST_SUCCESS != XIicPs_MasterSendPolled( &m_i2cBus, subAddr, subAddrLength, devAddress ) ) {
+            break;
+        }
+        I2C_waitFree();
+        if( XST_SUCCESS != XIicPs_MasterRecvPolled( &m_i2cBus, data, dataLength, devAddress ) ) {
+            break;
+        }
+        return true;
+    } while( 0 );
+	return false;
+}
+

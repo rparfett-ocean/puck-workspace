@@ -1,0 +1,433 @@
+// Sensor.c
+// implementation of OHOFA10 sensor and OAH0428 Bridge pair
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <math.h>
+#include "sensor.h"
+#include "oho_fa10_oah0428_registers.h"
+#include "xparameters.h"
+#include "I2C.h"
+#include "xil_printf.h"
+
+// i2c info
+#define SENSOR_READ_ADDR        (0x6)
+#define SENSOR_WRITE_ADDR       (0x36)
+#define SENSOR_SUBADDR_LENGTH   (2)
+#define SENSOR_DATA_LENGTH      (1)
+
+// exposure
+#define MAX_EXPOSURE_PCT        (10000)               // all exposure values passed in 0-10000, corresponding to 0-100%
+#define EXPO_BAND_SIZE          (16000)                // under the hood, our exposure is in 3 bands of 16000, for integration time, analog, and digital gains
+#define MAX_NEXPOSURE           (48000)
+
+// integration time
+#define INTEGRATION_NMAX        (EXPO_BAND_SIZE-1)     // in normalized space
+#define MAX_INTEGRATION_VAL     (888)       // lines - VTS-8 for 896 lines in 800 line configurarions
+#define MIN_INTEGRATION_VAL     (4)         // lines - per datasheet
+
+// set the priority for the exposure mechanisms after the integration time is maxed out.
+static bool m_digitalPriority = false;  // true: integration time -> digital gain -> analog gain 
+                                        // false: integration time -> analog gain -> digital gain
+// Analog Priority
+// analog gain
+#define AP_ANALOG_GAIN_NMIN         (INTEGRATION_NMAX+1)
+#define AP_ANALOG_GAIN_NMAX         (INTEGRATION_NMAX+EXPO_BAND_SIZE)
+#define ANALOG_GAIN_RANGE		    (3839)             // actual gain range given that the sensor has 0x100 to 0xfff
+// digital gain
+#define AP_DIGITAL_GAIN_NMIN        (AP_ANALOG_GAIN_NMAX+1)
+#define AP_DIGITAL_GAIN_NMAX        (AP_ANALOG_GAIN_NMAX+EXPO_BAND_SIZE)
+#define DIGITAL_GAIN_RANGE		    (61439)             // actual gain range given that the sensor has 0x1000 to 0xffff
+
+// Digital Priority
+// digital gain
+#define DP_DIGITAL_GAIN_NMIN        (INTEGRATION_NMAX+1)
+#define DP_DIGITAL_GAIN_NMAX        (INTEGRATION_NMAX+EXPO_BAND_SIZE)
+
+// analog gain
+#define DP_ANALOG_GAIN_NMIN         (DP_DIGITAL_GAIN_NMAX+1)
+#define DP_ANALOG_GAIN_NMAX         (DP_DIGITAL_GAIN_NMAX+EXPO_BAND_SIZE)
+
+// max and min gains in a band.
+#define GAIN_MIN                0
+#define GAIN_MAX                15999
+
+static uint32_t m_exposure;
+static bool m_isMirrored = true;
+static bool m_isFlipped = true;
+
+static SENSOR_RES_T m_resolution = RES_1280X800;
+
+static const SENSOR_IMAGE_SIZE_T m_imageSize[ NUM_RES ] = {
+    { 1280, 800 },
+    { 1280, 720 },
+    { 800, 800 },
+};
+
+// Private Declarations
+static bool Sensor_setIntegrationTime( uint32_t val );
+static bool Sensor_setGain( uint32_t value );
+static bool Sensor_setDigitalGain( uint32_t value );
+
+// Public Implementations
+
+bool Sensor_writeReg( uint16_t addr, uint8_t data )
+{
+    uint8_t abuf[ SENSOR_SUBADDR_LENGTH +  SENSOR_DATA_LENGTH ];
+
+	abuf[ 0 ] = addr / 256;
+    abuf[ 1 ] = addr % 256;
+    abuf[ 2 ] = data;
+
+    return I2C_send( SENSOR_WRITE_ADDR,  SENSOR_SUBADDR_LENGTH + SENSOR_DATA_LENGTH, abuf );
+}
+
+bool Sensor_readRegBlocking( uint16_t addr, uint8_t *data )
+{
+    uint8_t abuf[ SENSOR_SUBADDR_LENGTH ];
+
+    abuf[ 0 ] = addr / 256;
+    abuf[ 1 ] = addr % 256;
+
+    return I2C_recv( SENSOR_READ_ADDR, SENSOR_SUBADDR_LENGTH, abuf, SENSOR_DATA_LENGTH, data );
+}
+
+bool Sensor_reset()
+{
+    return Sensor_writeReg( resetReg.address, resetReg.data );
+}
+
+#if INCLUDE_WINDOW
+//-----------------------------------------------------------------------------
+// Reprogram the window
+//-----------------------------------------------------------------------------
+bool Sensor_window()
+{
+    int dex = 0;
+    SENSOR_REGISTER_PAIR_T record;
+    uint8_t readback;
+
+    // Need to reset?
+#if 1
+    if( !Sensor_reset() ) {
+        return false;
+    }
+#endif
+
+    while (1) {
+        record = Sensor_Window[dex++];
+        if( record.address != ADDR_EOF ) {
+            if( !Sensor_writeReg( record.address, record.data ) ) {
+                return false;
+            } else {
+                if( !Sensor_readRegBlocking( record.address, &readback ) ) {
+                    return false;
+                } else {
+                    if( readback != record.data ) {
+                        return false;
+                    }
+                }
+            }
+        }
+        else {
+            break;
+        }
+    }
+    return true;
+}
+
+#endif
+
+bool Sensor_init( SENSOR_RES_T res, SENSOR_FREQ_T freq )
+{
+    int dex = 0;
+    SENSOR_REGISTER_PAIR_T record;
+    uint8_t readback;
+
+    if( !Sensor_reset() ) {
+        return false;
+    }
+
+    while (1) {
+        record = Sensor_SettingsFile[dex++];
+        if( record.address != ADDR_EOF ) {
+            if( !Sensor_writeReg( record.address, record.data ) ) {
+                return false;
+            } else {
+                if( !Sensor_readRegBlocking( record.address, &readback ) ) {
+                    return false;
+                } else {
+                    if( readback != record.data ) {
+                        return false;
+                    }
+                }
+            }
+        }
+        else {
+            break;
+        }
+    } 
+    return true;
+}
+
+uint32_t Sensor_getExposure( void )
+{
+    return m_exposure;
+}
+
+#if INCLUDE_GAIN
+SENSOR_RESULT_T Sensor_setExposure( uint32_t  val )
+{
+  
+//    if( val > MAX_EXPOSURE_PCT ) {
+//        val = MAX_EXPOSURE_PCT;
+//    }
+    if( val > 10000 ) {
+        val = 1000;
+    }
+
+    if( val == m_exposure ) {
+        // no change
+        return RSLT_OK;
+    }
+
+    m_exposure = val;
+    if( m_digitalPriority )
+    {
+        val = (val * DP_ANALOG_GAIN_NMAX / MAX_EXPOSURE_PCT );       //get us to the 48000 under the hood value
+        if( val	 <= INTEGRATION_NMAX )  
+        {       // value required is in the integration range
+            return Sensor_setupGains( val, GAIN_MIN, GAIN_MIN );
+        } 
+        else if( ( val >= DP_DIGITAL_GAIN_NMIN ) &&  ( val <= DP_DIGITAL_GAIN_NMAX ) )     
+        {       // value required is in the digital gain range
+            return Sensor_setupGains( GAIN_MAX, GAIN_MIN, val - DP_DIGITAL_GAIN_NMIN );
+        } 
+        else if( ( val >= DP_ANALOG_GAIN_NMIN ) &&  ( val <= DP_ANALOG_GAIN_NMAX ) )      
+        {       // value required is in the analog gain range
+            return Sensor_setupGains( GAIN_MAX, val - DP_ANALOG_GAIN_NMIN, GAIN_MAX );
+        }
+        else 
+        {
+            return Sensor_setupGains( GAIN_MAX, GAIN_MAX, GAIN_MAX );
+        }
+    }
+    else        // analog priority
+    {
+        val = (val * AP_DIGITAL_GAIN_NMAX / MAX_EXPOSURE_PCT );       //get us to the 48000 under the hood value
+        if( val	 <= INTEGRATION_NMAX )  
+        {        // value required is in the integration range
+            return Sensor_setupGains( val, GAIN_MIN, GAIN_MIN );
+        } 
+        else if( ( val >= AP_ANALOG_GAIN_NMIN ) &&  ( val <= AP_ANALOG_GAIN_NMAX ) ) 
+        {     // value required is in the analog gain range
+            return Sensor_setupGains( GAIN_MAX, val - AP_ANALOG_GAIN_NMIN, GAIN_MIN );
+        }
+        else if( ( val >= AP_DIGITAL_GAIN_NMIN ) &&  ( val <= AP_DIGITAL_GAIN_NMAX ) ) 
+        {     // value required is in the digital gain range
+            return Sensor_setupGains( GAIN_MAX, GAIN_MAX, val - AP_DIGITAL_GAIN_NMIN );
+        } 
+        else 
+        {
+            return Sensor_setupGains( GAIN_MAX, GAIN_MAX, GAIN_MAX );
+        }
+    }
+
+}
+
+// Private implementations
+static bool Sensor_setIntegrationTime( uint32_t val )
+{   
+    uint32_t integ;
+
+    // calc the integration time from its range in the normalized gain range
+    integ = ( val * MAX_INTEGRATION_VAL / INTEGRATION_NMAX );
+
+    if( integ <= MIN_INTEGRATION_VAL ) {
+        integ = MIN_INTEGRATION_VAL;
+    }
+
+    do {
+        if( !Sensor_writeReg( REG_INTEG_COARSE, integ >> 8 ) ) {
+            break;
+        }
+        if( !Sensor_writeReg( REG_INTEG_FINE, integ & 0xff ) ) {
+            break;
+        }
+        return true;
+    } while( false );
+    return false;
+}
+
+static bool Sensor_setGain( uint32_t val )
+{
+    uint8_t msb;
+    uint8_t lsb;
+    uint32_t    normalizedGain;  
+
+    normalizedGain = ( val * ANALOG_GAIN_RANGE / EXPO_BAND_SIZE ) + 0x100;   // normalize to a minimum of 1x
+
+    msb = (uint8_t)( normalizedGain >> 8);
+    lsb = (uint8_t)( normalizedGain & 0xff);
+    do {
+        if( !Sensor_writeReg( REG_ANALOG_COARSE, msb ) ) {
+            break;
+        }
+        if( !Sensor_writeReg( REG_ANALOG_FINE, lsb ) ) {
+            break;
+        }
+        return true;
+    } while( false );
+    return false;
+}
+
+static bool Sensor_setDigitalGain( uint32_t val )
+{
+    uint8_t c;
+    uint8_t fu;
+    uint8_t fl;
+    bool result = false;
+    uint32_t    normalizedGain;  
+
+    normalizedGain = ( val * DIGITAL_GAIN_RANGE / EXPO_BAND_SIZE ) + 0x1000;   // normalize to a minimum of 1x
+
+    c = (normalizedGain >> 12 ) & 0x0f;
+    fu = ( normalizedGain & 0x0ff0 ) >> 4;
+    fl = ( normalizedGain & 0x0f ) << 4;
+    do {
+        if( !Sensor_writeReg( REG_DIGITAL_COARSE, c ) ) {
+            break;
+        }
+        if( !Sensor_writeReg( REG_DIGITAL_FINEU, fu ) ) {
+            break;
+        }
+        if( !Sensor_writeReg( REG_DIGITAL_FINEL, fl ) ) {
+            break;
+        }
+        result = true;
+    } while( false );
+    return result;
+}
+#endif
+
+#if INCLUDE_ROTATION
+bool Sensor_mirror( bool ena )
+{
+    uint8_t m;
+
+    if( ena != m_isMirrored ) {
+        do {
+            if( !Sensor_readRegBlocking( ispXWinLsbReg.address, &m ) ) {
+                break;
+            }
+
+            m = ena ? m+1 : m-1;
+            
+            if( !Sensor_writeReg( ispXWinLsbReg.address, m ) ) {
+                break;
+            }
+
+            if( !Sensor_readRegBlocking( mirrorReg.address, &m ) ) {
+                break;
+            }
+
+            m = ena ? m | mirrorReg.data : m & ~mirrorReg.data;
+                    
+            if( !Sensor_writeReg( mirrorReg.address, m ) ) {
+                break;
+            }
+
+            m_isMirrored = ena;
+            return true;
+        } while( 0 );
+    }
+    return false;
+}
+
+bool Sensor_flip( bool ena )
+{
+    uint8_t m;
+
+    if( ena != m_isFlipped ) {
+        do
+        {
+            if( !Sensor_readRegBlocking( ispYWinLsbReg.address, &m ) ) {
+                break;
+            }
+
+            m = ena ? m+1 : m-1;
+            
+            if( !Sensor_writeReg( ispYWinLsbReg.address, m ) ) {
+                break;
+            }
+
+            if( !Sensor_readRegBlocking( flipReg.address, &m ) ) {
+                break;
+            }
+
+            m = ena ? m | flipReg.data : m & ~flipReg.data;
+                    
+            if( !Sensor_writeReg( flipReg.address, m ) ) {
+                break;
+            }
+            
+            m_isFlipped = ena;
+            return true;
+        } while( 0 );
+    }
+    return false;
+}
+#endif
+
+#if INCLUDE_GAIN
+SENSOR_RESULT_T Sensor_setupGains( uint32_t integ, uint32_t ana, uint32_t digi )
+{
+    do {
+        if( !Sensor_setIntegrationTime( integ ) ) {
+            break;
+        }
+        if( !Sensor_setGain( ana ) ) {    
+            break;
+        }
+        if( !Sensor_setDigitalGain( digi ) ) {      
+            break;
+        }
+        return RSLT_OK;     // all gains successfully written
+    } while( false );
+
+    return RSLT_ERR_COMMS;  // at least one failed to write
+}
+
+SENSOR_RESULT_T Sensor_setDirectGains( uint32_t integ, uint32_t ana, uint32_t digi )
+{
+    uint8_t c;
+    uint8_t fu;
+    uint8_t fl;
+
+    Sensor_writeReg( REG_INTEG_COARSE, integ >> 8 );
+    Sensor_writeReg( REG_INTEG_FINE, integ & 0xff );
+
+    Sensor_writeReg( REG_ANALOG_COARSE, ana >> 8 );
+    Sensor_writeReg( REG_ANALOG_FINE, ana & 0xff );
+
+    c = (digi >> 12 ) & 0x0f;
+    fu = ( digi & 0x0ff0 ) >> 4;
+    fl = ( digi & 0x0f ) << 4;
+    Sensor_writeReg( REG_DIGITAL_COARSE, c );
+    Sensor_writeReg( REG_DIGITAL_FINEU, fu );
+    Sensor_writeReg( REG_DIGITAL_FINEL, fl );
+
+    return RSLT_OK;
+}
+
+void Sensor_setExpDigitalPriority( bool ena )
+{
+    m_digitalPriority = ena;
+}
+#endif
+
+void Sensor_setTestPattern( bool ena )
+{
+    uint8_t reg = 0x00 | ena ? 0x90 : 0x00;
+    Sensor_writeReg( 0x4503, reg );
+}

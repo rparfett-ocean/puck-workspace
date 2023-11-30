@@ -1,0 +1,169 @@
+11:58:43 **** Incremental Build of configuration Debug for project puck-app ****
+make all 
+'Building file: ../src/CHUtils.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/CHUtils.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/CHUtils.d" -MT"src/CHUtils.o" -o "src/CHUtils.o" "../src/CHUtils.c"
+../src/CHUtils.c: In function 'CHUtils_setExposure':
+../src/CHUtils.c:158:14: warning: unused variable 'val32' [-Wunused-variable]
+  158 |     uint32_t val32 = ((uint32_t)expPct * 56)/100 + 15;    // translate slider 0-100 to 15-66
+      |              ^~~~~
+../src/CHUtils.c: In function 'CHUtils_setRotationClock':
+../src/CHUtils.c:174:13: warning: variable 'shft' set but not used [-Wunused-but-set-variable]
+  174 |         int shft = 0;
+      |             ^~~~
+'Finished building: ../src/CHUtils.c'
+' '
+'Building file: ../src/Camera.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/Camera.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/Camera.d" -MT"src/Camera.o" -o "src/Camera.o" "../src/Camera.c"
+../src/Camera.c: In function 'Camera_writeFpgaReg':
+../src/Camera.c:25:13: warning: variable 'abuf' set but not used [-Wunused-but-set-variable]
+   25 |     uint8_t abuf[ sizeof(addr) + sizeof(data) ];
+      |             ^~~~
+../src/Camera.c: In function 'Camera_readFpgaRegBlocking':
+../src/Camera.c:38:13: warning: variable 'abuf' set but not used [-Wunused-but-set-variable]
+   38 |     uint8_t abuf[ sizeof(addr) ];
+      |             ^~~~
+../src/Camera.c: In function 'Camera_setExposure':
+../src/Camera.c:119:5: warning: 'sns' is used uninitialized [-Wuninitialized]
+  119 |     switch( sns ) {
+      |     ^~~~~~
+'Finished building: ../src/Camera.c'
+' '
+'Building file: ../src/I2C.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/I2C.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/I2C.d" -MT"src/I2C.o" -o "src/I2C.o" "../src/I2C.c"
+'Finished building: ../src/I2C.c'
+' '
+'Building file: ../src/TestBenchDispatcher.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/TestBenchDispatcher.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/TestBenchDispatcher.d" -MT"src/TestBenchDispatcher.o" -o "src/TestBenchDispatcher.o" "../src/TestBenchDispatcher.c"
+'Finished building: ../src/TestBenchDispatcher.c'
+' '
+'Building file: ../src/TestBenchPacket.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/TestBenchPacket.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/TestBenchPacket.d" -MT"src/TestBenchPacket.o" -o "src/TestBenchPacket.o" "../src/TestBenchPacket.c"
+'Finished building: ../src/TestBenchPacket.c'
+' '
+'Building file: ../src/TestBenchUtils.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/TestBenchUtils.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/TestBenchUtils.d" -MT"src/TestBenchUtils.o" -o "src/TestBenchUtils.o" "../src/TestBenchUtils.c"
+'Finished building: ../src/TestBenchUtils.c'
+' '
+'Building file: ../src/Timer.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/Timer.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/Timer.d" -MT"src/Timer.o" -o "src/Timer.o" "../src/Timer.c"
+'Finished building: ../src/Timer.c'
+' '
+'Building file: ../src/color.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/color.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/color.d" -MT"src/color.o" -o "src/color.o" "../src/color.c"
+../src/color.c: In function 'Color_setColorCorrectionMatrix':
+../src/color.c:256:66: warning: passing argument 1 of 'Color_writeMatrixDirect' discards 'const' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  256 |         Color_writeMatrixDirect( choice == 0 ? &m_identity[0][0] : &m_ccmDefault[0][0] );
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+In file included from ../src/color.c:12:
+../src/color.h:201:38: note: expected 'float *' but argument is of type 'const float *'
+  201 | void Color_writeMatrixDirect( float *k );
+      |                               ~~~~~~~^
+'Finished building: ../src/color.c'
+' '
+'Building file: ../src/dac.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/dac.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/dac.d" -MT"src/dac.o" -o "src/dac.o" "../src/dac.c"
+'Finished building: ../src/dac.c'
+' '
+'Building file: ../src/gamma.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/gamma.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/gamma.d" -MT"src/gamma.o" -o "src/gamma.o" "../src/gamma.c"
+'Finished building: ../src/gamma.c'
+' '
+'Building file: ../src/main.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+../src/main.c: In function 'main':
+../src/main.c:79:13: warning: unused variable 'DpLines' [-Wunused-variable]
+   79 |         u32 DpLines = 0x339;
+      |             ^~~~~~~
+../src/main.c:78:13: warning: variable 'RegVal' set but not used [-Wunused-but-set-variable]
+   78 |         u32 RegVal;
+      |             ^~~~~~
+'Finished building: ../src/main.c'
+' '
+'Building file: ../src/mask.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/mask.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/mask.d" -MT"src/mask.o" -o "src/mask.o" "../src/mask.c"
+../src/mask.c: In function 'Mask_rotationIndicator':
+../src/mask.c:292:30: warning: unused variable 'bmp' [-Wunused-variable]
+  292 |         const unsigned char *bmp;
+      |                              ^~~
+'Finished building: ../src/mask.c'
+' '
+'Building file: ../src/platform.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/platform.d" -MT"src/platform.o" -o "src/platform.o" "../src/platform.c"
+'Finished building: ../src/platform.c'
+' '
+'Building file: ../src/sensor.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/sensor.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/sensor.d" -MT"src/sensor.o" -o "src/sensor.o" "../src/sensor.c"
+../src/sensor.c:68:13: warning: 'Sensor_setIntegrationTime' declared 'static' but never defined [-Wunused-function]
+   68 | static bool Sensor_setIntegrationTime( uint32_t val );
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+../src/sensor.c:69:13: warning: 'Sensor_setGain' declared 'static' but never defined [-Wunused-function]
+   69 | static bool Sensor_setGain( uint32_t value );
+      |             ^~~~~~~~~~~~~~
+../src/sensor.c:70:13: warning: 'Sensor_setDigitalGain' declared 'static' but never defined [-Wunused-function]
+   70 | static bool Sensor_setDigitalGain( uint32_t value );
+      |             ^~~~~~~~~~~~~~~~~~~~~
+../src/sensor.c:61:34: warning: 'm_imageSize' defined but not used [-Wunused-const-variable=]
+   61 | static const SENSOR_IMAGE_SIZE_T m_imageSize[ NUM_RES ] = {
+      |                                  ^~~~~~~~~~~
+../src/sensor.c:59:21: warning: 'm_resolution' defined but not used [-Wunused-variable]
+   59 | static SENSOR_RES_T m_resolution = RES_1280X800;
+      |                     ^~~~~~~~~~~~
+../src/sensor.c:57:13: warning: 'm_isFlipped' defined but not used [-Wunused-variable]
+   57 | static bool m_isFlipped = true;
+      |             ^~~~~~~~~~~
+../src/sensor.c:56:13: warning: 'm_isMirrored' defined but not used [-Wunused-variable]
+   56 | static bool m_isMirrored = true;
+      |             ^~~~~~~~~~~~
+../src/sensor.c:30:13: warning: 'm_digitalPriority' defined but not used [-Wunused-variable]
+   30 | static bool m_digitalPriority = false;  // true: integration time -> digital gain -> analog gain
+      |             ^~~~~~~~~~~~~~~~~
+'Finished building: ../src/sensor.c'
+' '
+'Building file: ../src/snapshot.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/snapshot.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/snapshot.d" -MT"src/snapshot.o" -o "src/snapshot.o" "../src/snapshot.c"
+'Finished building: ../src/snapshot.c'
+' '
+'Building file: ../src/xdpdma_video.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/xdpdma_video.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/xdpdma_video.d" -MT"src/xdpdma_video.o" -o "src/xdpdma_video.o" "../src/xdpdma_video.c"
+'Finished building: ../src/xdpdma_video.c'
+' '
+'Building file: ../src/xdppsu_interrupt.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/xdppsu_interrupt.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/xdppsu_interrupt.d" -MT"src/xdppsu_interrupt.o" -o "src/xdppsu_interrupt.o" "../src/xdppsu_interrupt.c"
+'Finished building: ../src/xdppsu_interrupt.c'
+' '
+'Building file: ../src/xuart.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -DDEBUG -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/xuart.o" -IC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bspinclude/include -MMD -MP -MF"src/xuart.d" -MT"src/xuart.o" -o "src/xuart.o" "../src/xuart.c"
+'Finished building: ../src/xuart.c'
+' '
+'Building target: puck-app.elf'
+'Invoking: ARM v8 gcc linker'
+aarch64-none-elf-gcc -Wl,-T -Wl,../src/lscript.ld -LC:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/sw/puck96-platform/standalone_domain/bsplib/lib -o "puck-app.elf"  ./src/CHUtils.o ./src/Camera.o ./src/I2C.o ./src/TestBenchDispatcher.o ./src/TestBenchPacket.o ./src/TestBenchUtils.o ./src/Timer.o ./src/color.o ./src/dac.o ./src/gamma.o ./src/main.o ./src/mask.o ./src/platform.o ./src/sensor.o ./src/snapshot.o ./src/xdpdma_video.o ./src/xdppsu_interrupt.o ./src/xuart.o   -lm -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+'Finished building target: puck-app.elf'
+' '
+'Invoking: ARM v8 Print Size'
+aarch64-none-elf-size puck-app.elf  |tee "puck-app.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+ 249435	   8178	3716755	3974368	 3ca4e0	puck-app.elf
+'Finished building: puck-app.elf.size'
+' '
+
+11:58:51 Build Finished (took 7s.953ms)
+

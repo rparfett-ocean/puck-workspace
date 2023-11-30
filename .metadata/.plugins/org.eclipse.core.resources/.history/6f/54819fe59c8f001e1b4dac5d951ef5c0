@@ -1,0 +1,438 @@
+// TestBenchPacket.c
+// Handles packet mode
+//
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include "TestBenchPacket.h"
+#include "TestBenchUtils.h"
+#include "sensor.h"
+#include "dac.h"
+#include "snapshot.h"
+#include "xparameters.h"
+#include "xil_printf.h"
+#include "mask.h"
+#include "xuart.h"
+#include "CHUtils.h"
+#include "Camera.h"
+#include "Gamma.h"
+#include "sleep.h"
+#include "color.h"
+#include "Registers.h"
+
+#ifdef DEBUG
+#define dbg(x...) 	xil_printf(x)
+#else
+#define dbg(x...)
+#endif
+
+#define TEST_BENCH_PACKET_BUFFER_SIZE (256)
+#define MAX_PACKET_ARGS (16)
+
+static char m_packetBuffer[ TEST_BENCH_PACKET_BUFFER_SIZE ];
+static char m_prevPacketBuffer[ TEST_BENCH_PACKET_BUFFER_SIZE ];
+static uint32_t m_packetIndex;
+static uint32_t m_prevPacketIndex;
+static bool m_pktEcho = true;
+
+#define BACKSPACE   (0x08)
+
+const float gamVal[] = { 1.6F, 1.8F, 2.0F, 2.2F, 2.4F, 2.6F };
+
+typedef union 
+{
+    int32_t i32;
+    float f32;
+} ARG;
+
+/**
+ *
+ */
+static void TestBenchPacket_parse( void );
+static void TestBenchPacket_process( char *cmd, uint32_t count, ARG *args );
+
+
+bool TestBenchPacket_check()
+{
+	uint8_t chr;
+    while ( TestBenchUtils_hitc( &chr ) ) {
+        if( TestBenchPacket_add( chr ) ) {
+            if( chr == '\x0d' ) {     // CR is end of packet
+            	if( m_packetIndex == 1 ) {	// if it's empty, reuse what we have - like uparrow in a command shell
+            		m_packetIndex = m_prevPacketIndex-1;
+            		strncpy( m_packetBuffer, m_prevPacketBuffer, strlen(m_prevPacketBuffer)-1 );
+            		m_packetBuffer[ m_packetIndex ] = 0;			// make sure we have a null
+                    dbg( "\r%s", m_packetBuffer );
+            	}
+            	else {
+    				TestBenchPacket_add( 0x00 );   // close out the string
+    				strcpy( m_prevPacketBuffer, m_packetBuffer );
+    				m_prevPacketIndex = m_packetIndex;
+    				TestBenchPacket_parse();
+    				memset( m_packetBuffer, 0x00, TEST_BENCH_PACKET_BUFFER_SIZE );
+    				m_packetIndex = 0;
+    				return true ;
+            	}
+            }
+        }
+        else {
+            memset( m_packetBuffer, 0x00, TEST_BENCH_PACKET_BUFFER_SIZE );
+            m_packetIndex = 0;
+            return true;            // but return true to stay in packet mode
+        }
+    }     
+    return true;                // stay in packet mode if nothing available   
+}
+
+bool TestBenchPacket_add( uint8_t chr )
+{
+#ifdef DEBUG
+    if( chr == BACKSPACE ) {
+        if( m_packetIndex ) {
+            m_packetBuffer[ --m_packetIndex ] = 0x00;
+            if( m_pktEcho ) {
+                dbg( "\n\r%s", m_packetBuffer );
+            }
+        }   
+    }
+	else {
+		m_packetBuffer[ m_packetIndex++ ] = chr;
+		m_packetBuffer[ m_packetIndex ] = 0x00;         // preserve a null-terminated string
+		if( m_pktEcho ) {
+			dbg( "%c", chr );
+		}
+    }
+#else
+    m_packetBuffer[ m_packetIndex++ ] = chr;
+    m_packetBuffer[ m_packetIndex ] = 0x00;         // preserve a null-terminated string
+#endif
+    return m_packetIndex == TEST_BENCH_PACKET_BUFFER_SIZE ? false : true;
+}
+
+static void TestBenchPacket_toUcase( char *in)
+{
+    char *inPtr = in;
+
+    while( *inPtr ) {
+        *inPtr = toupper( *inPtr );
+        inPtr++;
+    }
+
+}
+
+static void TestBenchPacket_parse( void )
+{
+    const char delims[] = ",\r";
+    char *frag;
+    char *cmd;
+    ARG arg[ MAX_PACKET_ARGS ]; 
+    uint16_t  argDex = 0;
+    bool done = false;
+
+    frag = strtok( m_packetBuffer, delims );
+    cmd = &frag[ 1 ];
+    TestBenchPacket_toUcase( cmd );
+
+    if( m_pktEcho ) {
+        dbg( "\n\r" );           //move to the start of the next line
+    }
+
+    // break up the command line
+    do
+    {
+        frag = strtok( NULL, delims );
+        if( frag != NULL )
+        {
+            if( strstr( frag, "0x" ) )          // hex number
+            {
+                sscanf( frag + 2, "%x", &arg[ argDex ].i32 );
+            }
+            else        // decimal or floating point
+            {
+                sscanf( frag, "%f", &arg[ argDex ].f32 );
+                if( !strstr( frag, ".") )
+                {
+                    arg[ argDex ].i32 = (int32_t)arg[ argDex ].f32;
+                }
+            }
+            argDex++;
+        }
+        else
+        {
+            done = true;
+        }
+    } while( !done ); 
+
+    TestBenchPacket_process( cmd, argDex, arg );
+}
+
+static void TestBenchPacket_process( char *cmd, uint32_t count, ARG *arg )
+{
+
+#ifdef DEBUG
+    uint8_t readback8;
+    uint16_t readback16;
+    static uint16_t m_currentSensorSubAddr;
+    uint8_t buf[ MAX_PACKET_ARGS ];
+    int dex;
+
+    if( !strcmp( cmd, "SNW" ) )
+    {
+        // Write a sensor register
+        m_currentSensorSubAddr = (uint16_t)arg[ 0 ].i32;
+        Sensor_writeReg( m_currentSensorSubAddr, (uint8_t)arg[ 1 ].i32 );
+    }
+    else if( !strcmp( cmd, "SNR" ) )
+    {
+        // Read a sensor register
+        m_currentSensorSubAddr = (uint16_t)arg[ 0 ].i32;
+        Sensor_readRegBlocking( m_currentSensorSubAddr, &readback8 );
+        dbg("Sensor Read:%x:%x\n\r", m_currentSensorSubAddr, readback8 );
+    }
+    else if( !strcmp( cmd, "SNI" ) )
+    {
+    	// Init the sensor
+        Sensor_init( (SENSOR_RES_T)(arg[ 0 ].i32) , FREQ_60HZ );
+    }
+    else if( !strcmp( cmd, "DAW" ) )
+    {
+        // Write the LED DAC
+        DAC_writePct( (uint16_t)arg[ 0 ].i32 );   
+    }
+    else if( !strcmp( cmd, "DAR" ) )
+    {
+        // Read the LED DAC
+        DAC_readVal( &readback16 );   
+        dbg("Read DAC: %x\n\r",  readback16 );
+    }
+
+	else if( !strcmp( cmd, "I2W" ) )
+    {
+        // Generic i2C write to any address
+        for( dex = 1; dex < count; dex++ )
+        {
+            buf[ dex - 1 ] = (uint8_t)arg[ dex ].i32;
+        }
+        TestBenchUtils_writeI2C( buf, count-1, (uint8_t)arg[ 0 ].i32 );
+    }
+	else if( !strcmp( cmd, "I2R" ) )
+    {
+        // Generic i2C read from any address
+        for( dex = 1; dex < count; dex++ )
+        {
+            buf[ dex - 1 ] = (uint8_t)arg[ dex ].i32;
+        }
+        TestBenchUtils_writeI2C( buf, count-1, (uint8_t)arg[ 0 ].i32 );
+        TestBenchUtils_readI2C( (uint8_t)arg[ 0 ].i32 );
+    }
+    else if( !strcmp( cmd, "PKE" ) )
+    {
+        m_pktEcho = (bool)(arg[ 0 ].i32);
+        dbg( "\r\n" );           //move to the start of the line
+    }
+    else if( !strcmp( cmd, "EXI" ) )            // set individual gains and integration I,A,D
+    {
+#if INCLUDE_GAIN
+        Sensor_setupGains( (uint32_t)(arg[ 0 ].i32), (uint32_t)(arg[ 1 ].i32), (uint32_t)(arg[ 2 ].i32) );
+#endif
+    }
+    else if( !strcmp( cmd, "EXD" ) )            // set individual gains and integration direct to registers - no normalization
+    {
+#if INCLUDE_GAIN
+        Sensor_setDirectGains( (uint32_t)(arg[ 0 ].i32), (uint32_t)(arg[ 1 ].i32), (uint32_t)(arg[ 2 ].i32) );
+#endif
+    }
+    else if( !strcmp( cmd, "RWR"  ))                        // Write to FPGA register
+    {
+        uint32_t addr = (uint32_t)(arg[ 0 ].i32);
+        uint32_t data = (uint32_t)(arg[ 1 ].i32);
+
+        Xil_Out32(addr, data );
+    }
+    else if( !strcmp( cmd, "RRD"  ))                        // read to FPGA IO register
+    {
+        uint32_t addr = (uint32_t)(arg[ 0 ].i32);
+        dbg("Register [%x]:%x\r\n", addr, Xil_In32( addr ) );
+    }
+    else if( !strcmp( cmd, "OSP"  ))                        // set a pixel on the OSD: x,y,r,g,b,t
+    {
+    	Mask_setPixelRGB( (uint32_t)(arg[ 0 ].i32), (uint32_t)(arg[ 1 ].i32), (uint32_t)(arg[ 2 ].i32), (uint32_t)(arg[ 3 ].i32), (uint32_t)(arg[ 4 ].i32), (uint32_t)(arg[ 5 ].i32) );
+    }
+    else if( !strcmp( cmd, "ODL"  ))                        // draw a line on the OSD: x1,c2, y1, y2 ,r,g,b, t
+    {
+    	Mask_drawLine( (uint32_t)(arg[ 0 ].i32), (uint32_t)(arg[ 1 ].i32), (uint32_t)(arg[ 2 ].i32), (uint32_t)(arg[ 3 ].i32), (uint32_t)(arg[ 4 ].i32), (uint32_t)(arg[ 5 ].i32), (uint32_t)(arg[ 6 ].i32), (uint32_t)(arg[ 7 ].i32) );
+    }
+    else if( !strcmp( cmd, "OSS"  ))                        // draw stair step the OSD: x, y1, y2, r, g, b, t
+    {
+    	Mask_stairStep( (uint32_t)(arg[ 0 ].i32), (uint32_t)(arg[ 1 ].i32), (uint32_t)(arg[ 2 ].i32), (uint32_t)(arg[ 3 ].i32), (uint32_t)(arg[ 4 ].i32), (uint32_t)(arg[ 5 ].i32), (uint32_t)(arg[ 6 ].i32) );
+    }
+    else if( !strcmp( cmd, "OST"  ))                        // set the OSD transparency in %
+    {
+    	Mask_transparency( (uint32_t)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "ODR"  ))                        // draw a rectangle on the OSD
+    {
+    	Mask_drawRectangleOrthogonalRGB( (uint32_t)(arg[ 0 ].i32), (uint32_t)(arg[ 1 ].i32), (uint32_t)(arg[ 2 ].i32), (uint32_t)(arg[ 3 ].i32), (uint32_t)(arg[ 4 ].i32), (uint32_t)(arg[ 5 ].i32), (uint32_t)(arg[ 6 ].i32), (uint32_t)(arg[ 7 ].i32) );
+    }
+    else if( !strcmp( cmd, "OCL"  ))                        // clear the OSD to black and set the transparency
+    {
+    	Mask_clear( (uint32_t)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "OIR"  ))                        // indicate rotation
+    {
+    	Mask_rotationIndicator( (uint32_t)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "OPS"  ))                        // select page
+    {
+    	Mask_selectPage( (uint32_t)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "OSA"  ))                        // select the active page to display
+    {
+    	Mask_setActive( (uint32_t)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "SMI"  ))                        // sensor mirror
+    {
+#if INCLUDE_ROTATION
+    	Sensor_mirror( (bool)(arg[ 0 ].i32) );
+#endif
+    }
+    else if( !strcmp( cmd, "OEN"  ))                        // global osd enable
+    {
+    	Mask_enable( arg[ 0 ].i32 );
+    }
+    else if( !strcmp( cmd, "SFL"  ))                        // sensor flip
+    {
+#if INCLUDE_ROTATION
+    	Sensor_flip( (bool)(arg[ 0 ].i32) );
+#endif
+    }
+    else if( !strcmp( cmd, "PIC"  ))                        // take a picture
+    {
+    	Snapshot_take();
+    }
+    else if( !strcmp( cmd, "PIG"  ))                        // get the bitmap
+    {
+    	Snapshot_get( 0 );
+    }
+    else if( !strcmp( cmd, "GAM" ) )            // console sends anything for gamma
+    {
+    	Gamma_select( arg[ 0 ].f32 );
+    }
+	else if( !strcmp( cmd, "CCM" ) )            // console sends 9 floats for the CCM
+	{
+		float ccm[9];
+		for(dex = 0; dex < 9; dex++ ) {
+			ccm[dex] = arg[dex].f32;
+		}
+		Color_writeMatrixDirect( ccm );
+	}
+	else if( !strcmp( cmd, "CCE" ) )            // en/disable ccm
+	{
+		Color_enable( (bool)arg[ 0 ].i32 );
+	}
+    else if( !strcmp( cmd, "CLA" ) )
+    {
+        Color_latch();
+    }
+    else if( !strcmp( cmd, "BRD" ) )
+    {
+        Color_setBrightnessDirect( arg[0].f32 );
+    }
+    else if( !strcmp( cmd, "SCC" ) )
+    {
+        Color_setColorCorrectionMatrix ( arg[0].i32 );
+    }
+	else if( !strcmp( cmd, "CCL" ) )            
+	{
+        Xil_Out32( REG_CCM_LATCH, 1 );      //Latch the new values into the HW
+        Xil_Out32( REG_CCM_LATCH, 0 );      
+	}
+	else
+#endif
+    if( !strcmp( cmd, "ROT"  ))                        // rotation
+    {
+    	CHUtils_setRotationClock( arg[ 0 ].i32 );
+    	xil_printf( "*ROI,%d\n\r", CHUtils_getRotationClockPos() );			// send the rotation
+    }
+    else if( !strcmp( cmd, "LSE" ) )
+    {
+    	Camera_lightSourceEn( (bool)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "LSB" ) )
+    {
+        // Light source brightness
+    	Camera_lightSourceSet( (uint32_t)(arg[ 0 ].i32) );
+    }
+    else if( !strcmp( cmd, "EXP" ) )            // set exposure in 0-1000 space
+    {
+#if INCLUDE_GAIN
+        Sensor_setExposure( (uint32_t)(arg[ 0 ].i32) );
+#endif
+    }
+    else if( !strcmp( cmd, "GIA" ) )            // GUI is attached
+    {
+    	TestBenchUtils_setGuiAttached( true );
+        #ifndef DEBUG
+        TestBenchPacket_updateGui();
+        #endif
+    }
+    else if( !strcmp( cmd, "GAT" ) )            // select a new gamma table
+    {
+    	Gamma_select( gamVal[ arg[ 0 ].i32] );	// GUI sends fixed gammas
+    }
+    else if( !strcmp( cmd, "HUE" ) )
+    {
+    	Color_setHue((uint16_t)arg[0].i32 );
+    }
+    else if( !strcmp( cmd, "SAT" ) )
+    {
+		Color_setSaturation( (uint16_t)arg[0].i32);
+    }
+    else if( !strcmp( cmd, "COL" ) )
+    {
+        Color_setScale( arg[0].i32, (uint16_t)arg[1].i32 );
+    }
+    else if( !strcmp( cmd, "BRI" ) )
+    {
+        Color_setBrightness( (uint16_t)arg[0].i32 );
+    }
+    else if( !strcmp( cmd, "RPT" ) )
+    {
+        TestBenchPacket_updateGui();
+    }
+    else 
+    {
+
+    	// ignore silently
+    }
+
+}
+
+void TestBenchPacket_init()
+{
+    memset( m_packetBuffer, 0x00, TEST_BENCH_PACKET_BUFFER_SIZE );
+    memset( m_prevPacketBuffer, 0x00, TEST_BENCH_PACKET_BUFFER_SIZE );
+    m_packetIndex = 0;
+    m_prevPacketIndex = 0;
+}
+
+void TestBenchPacket_updateGui()
+{
+//    int i;
+	xil_printf( "*RRO,%d\n\r", CHUtils_getRotationClockPos() );			// send the rotation
+	xil_printf( "*RLI,%d\n\r", Camera_lightSourceIsEn() ? 1 : 0 );			// send the light source
+/*
+	xil_printf( "*RLB,%d\n\r", Camera_lightSourceGet() );				// send the light source brightness
+	xil_printf( "*REX,%d\n\r", Sensor_getExposure() );					// send the exposure
+	xil_printf( "*RSA,%d\n\r", Color_getSaturation() );					// send the saturation
+    xil_printf( "*RHU,%d\n\r", Color_getHue());                         // send the hue
+    xil_printf( "*RBR,%d\n\r", Color_getBrightness());                  // send the brightness
+
+    for( i = COLOR_CHANNEL_RED; i<COLOR_CHANNEL_NUM_CHANNELS; i++ ) {
+        xil_printf( "*RCO,%d,%d\n\r", i, Color_getScale(i) );                         // send the color channels
+    }
+*/
+}

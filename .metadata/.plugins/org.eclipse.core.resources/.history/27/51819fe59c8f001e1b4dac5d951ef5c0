@@ -1,0 +1,111 @@
+/*
+ * Registers.h
+ *
+ *  Created on: Jul 19, 2021
+ *      Author: repar
+ */
+
+#ifndef __REGISTERS_H__
+#define __REGISTERS_H__
+
+#include <stdint.h>
+#include "xparameters.h"
+
+#define FPGA_REG_BASE                       (XPAR_PL_AXI_REG_BASEADDR)
+#define REG_FPGA_VERSION                    (FPGA_REG_BASE+0x04)
+#define REG_DEMOSAIC_COLOR_CODE_DECODE      (FPGA_REG_BASE+0x08)
+#define REG_AXI_MASTER_WR_EN                (FPGA_REG_BASE+0x0c)
+
+typedef enum {
+	CAMERA_VIDEO = 0x1000,
+	INTERNAL_VIDEO = 0x0000,
+} tVideoSource;
+
+#define REG_VIDEO_MODE                      (FPGA_REG_BASE+0x14)
+#define DP_SYNC_SEL_SENSOR                  (0x01)
+#define DP_SYNC_SEL_INTERNAL                (0)
+
+typedef union {
+    struct vmodebits {
+        uint32_t dram_sel:                  2;      
+        uint32_t notused_1:                 2;
+        uint32_t dp_sync_sel:               1;      // 0 = sensor, 1= color bars internal
+        uint32_t notused_2:                 3;
+        uint32_t rot_input:                 1;
+        uint32_t notused_3:                 3;
+        uint32_t color_bars_sync_sel:       1;
+        uint32_t color_bars_pattern_sel:    2;
+        uint32_t notused_4:                 17;   
+    } bits;
+    uint32_t    u32;
+} tVideoMode;
+
+
+#define REG_TESTPAT_PX_PER_LINE             (FPGA_REG_BASE+0x18)
+#define REG_TESTPAT_ACTIVE_LINES            (FPGA_REG_BASE+0x1c)
+#define REG_TESTPAT_TOTAL_LINES             (FPGA_REG_BASE+0x20)
+#define REG_TESTPAT_VSYNC_START_LINE        (FPGA_REG_BASE+0x24)
+#define REG_TESTPAT_VSYNC_STOP_LINE         (FPGA_REG_BASE+0x28)
+#define VAL_TESTPAT_VSYNC_STOP_LINE         (0x07)
+#define REG_TESTPAT_HSYNC_RISING_EDGE_PX    (FPGA_REG_BASE+0x2c)
+#define REG_TESTPAT_DE_START_PX             (FPGA_REG_BASE+0x30)
+#define REG_TESTPAT_DE_STOP_PX              (FPGA_REG_BASE+0x34)
+#define REG_AXI_MASTER_WR_ADDR              (FPGA_REG_BASE+0x3c)
+#define REG_IP2BUS_MST_LENGTH               (FPGA_REG_BASE+0x40)
+#define REG_ROT_HORIZ_PIX_SHIFT             (FPGA_REG_BASE+0x44)
+#define REG_ROT_HCOUNT_DRAM_WR_START        (FPGA_REG_BASE+0x48)
+
+#define REG_AXI_FSM_EN                      (FPGA_REG_BASE+0x4c)
+
+typedef union {
+    struct drambits {
+        uint32_t sensor_dram_wr_en:         1;      
+        uint32_t video_dram_rd_en:          1;
+        uint32_t osd_dram_rd_en:            1;      // 0 = sensor, 1= color bars internal
+        uint32_t notused:                   29;
+    } bits;
+    uint32_t    u32;
+} tDramMode;
+
+#define REG_PAGE_SELECT		                (FPGA_REG_BASE+0x50)
+#define REG_CAMHEAD_PWR_EN                  (FPGA_REG_BASE+0x54)
+#define REG_OSD_EN                          (FPGA_REG_BASE+0x58)
+#define REG_DRAM_H_END 						(FPGA_REG_BASE+0x5c)
+#define REG_VIDEO_CENTER_OFFSET 			(FPGA_REG_BASE+0x60)
+#define REG_AXI_FSM_RD_EN                   (FPGA_REG_BASE+0x64)
+
+#define REG_ROTATE_SEL	                   	(FPGA_REG_BASE+0x68)
+
+typedef enum {
+	DEG_0 = 0,
+	DEG_90,
+	DEG_180,
+	DEG_270,
+} tRotateSel;
+
+// CCM
+#define REG_CCM_BYPASS						(FPGA_REG_BASE+0x74)
+#define REG_CCM_K_0_0						(FPGA_REG_BASE+0x78)
+#define REG_CCM_K_0_1						(FPGA_REG_BASE+0x7c)
+#define REG_CCM_K_0_2						(FPGA_REG_BASE+0x80)
+#define REG_CCM_K_0_3						(FPGA_REG_BASE+0xb0)
+#define REG_CCM_K_1_0						(FPGA_REG_BASE+0x84)
+#define REG_CCM_K_1_1						(FPGA_REG_BASE+0x88)
+#define REG_CCM_K_1_2						(FPGA_REG_BASE+0x8c)
+#define REG_CCM_K_1_3						(FPGA_REG_BASE+0xb4)
+#define REG_CCM_K_2_0						(FPGA_REG_BASE+0x90)
+#define REG_CCM_K_2_1						(FPGA_REG_BASE+0x94)
+#define REG_CCM_K_2_2						(FPGA_REG_BASE+0x98)
+#define REG_CCM_K_2_3						(FPGA_REG_BASE+0xb8)
+
+#define REG_CCM_LATCH						(FPGA_REG_BASE+0xbc)
+#define REG_GAMMA_RED_BASE					(FPGA_REG_BASE+0x10000)
+#define REG_GAMMA_GREEN_BASE				(FPGA_REG_BASE+0x14000)
+#define REG_GAMMA_BLUE_BASE					(FPGA_REG_BASE+0x18000)
+
+#define REG_SNAPSHOT_CTRL					(FPGA_REG_BASE+0x9c)
+#define REG_SNAPSHOT_SUB_ADDR				(FPGA_REG_BASE+0xa0)
+
+
+
+#endif /* __REGISTERS_H__ */

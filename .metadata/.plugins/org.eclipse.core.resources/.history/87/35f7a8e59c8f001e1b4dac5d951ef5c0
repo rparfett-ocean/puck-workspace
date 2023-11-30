@@ -1,0 +1,190 @@
+// Sensor.h
+// interface file to the OH01A1016 Sensor
+
+#ifndef __SENSOR_H__
+#define __SENSOR_H__
+
+#include <stdint.h>
+#include <stdbool.h>
+#include "xiicps.h"
+
+// we are using the sensor integration time to control the exposure in high luminosity scenes
+#define __USE_INTEGRATION_TIME__  (1)
+/**
+ * This enum defines the return values for the non-blocking state machine
+ * for reading from the sensor.  Call Sensor_tick to advance the state machine,
+ * and examine the retrun value
+ */
+
+typedef enum SENSOR_STATUS_e
+{
+    SENSOR_IDLE,
+    SENSOR_OK,
+    SENSOR_BUSY,
+    SENSOR_ERROR
+} SENSOR_STATUS_T;
+
+typedef enum SENSOR_FREQ_e
+{
+    FREQ_60HZ = 0,
+    FREQ_50HZ,
+    NUM_FREQS
+} SENSOR_FREQ_T;
+
+typedef enum SENSOR_RES_E
+{
+    RES_1280X800 = 0,
+    RES_1280X720,
+    RES_800X800,
+    NUM_RES,
+} SENSOR_RES_T;
+
+typedef enum SENSOR_RESULT_E
+{
+    RSLT_OK = 0,
+    RSLT_ERR_RANGE_LOW = -1,
+    RSLT_ERR_RANGE_HIGH = -2,
+    RSLT_ERR_COMMS = -3,
+    RSLT_ANALOG_GAIN_MIN = -4,
+    NUM_RSLT,
+} SENSOR_RESULT_T;
+
+typedef struct IMAGE_SIZE_t
+{
+    uint32_t    x;
+    uint32_t    y;
+} SENSOR_IMAGE_SIZE_T;
+
+/**
+ * \brief Perform a sensor reset via I2C command
+ * \param none
+ * \return sucess
+ */
+bool Sensor_reset( );
+
+/**
+ * \brief Write an arbitrary value
+ * \param address - sub-address of the register
+ * \param data - a single byte, as the sensor only accepts bytes
+ * \return sucess
+ */
+bool Sensor_writeReg( uint16_t addr, uint8_t data );
+
+/**
+ * \brief Read an arbitrary value and block until it responds
+ * \param address - sub-address of the register
+ * \param data - a pointer to a single byte
+ * \return sucess
+ */
+bool Sensor_readRegBlocking( uint16_t addr, uint8_t *data );
+
+/**
+ * \brief Read an arbitrary value, and return immediately
+ * After executing this function, the calling process needs to call the _tick
+ * until the return value is available
+ * \param address - sub-address of the register
+ * \return sucess
+ */
+bool Sensor_readRegNonBlocking( uint16_t addr );
+
+/**
+ * \brief Clear the non-blocking read state machine in the event of a 
+ * read error
+ */
+void Sensor_clearError();
+
+/**
+ * \brief Obtain the result of a non-blocking read
+ * \param data - a pointer to a single byte
+ */
+void Sensor_readData( uint8_t *data );
+
+/**
+ * \brief Service the non-blocking read state machine.
+ * \return Status of the read operation.  See the enum above.
+ */
+SENSOR_STATUS_T Sensor_tick();
+
+/**
+ * \brief Initialize the sensor
+ * \param res Desired resolution from the SENSOR_RES_T above
+ * \param freq mains frequency
+ * \return sucess
+ */
+bool Sensor_init( SENSOR_RES_T res, SENSOR_FREQ_T freq );
+
+/**
+ * \brief change sensor's window registers
+ * \param res Desired resolution from the SENSOR_RES_T above
+ * \param freq mains frequency
+ * \return sucess
+ */
+bool Sensor_window();
+
+/**
+ * \brief Select Mirror Image sensor output
+ * \param ena Disable or enable mirror
+ * \return sucess
+ */
+bool Sensor_mirror( bool ena );
+
+/**
+ * \brief Select Flipping of Image sensor output
+ * \param ena Disable or enable flip
+ * \return sucess
+ */
+bool Sensor_flip( bool ena );
+
+/**
+ * \brief Set the exposure value to a number in a 0-10000 space (percentage * 100) 
+ * \param val is the exposure value
+ * \return SENSOR_RESULT_T
+ * Exposure is a blend of integration time, analog gain and dgitial gain
+ * handled by the sensor device driver
+ */
+SENSOR_RESULT_T Sensor_setExposure( uint32_t  val );
+
+/**
+ * \brief Get the exposure value to a number in a 0-10000 space (percentage * 100) 
+ * \param void
+ * \return uint32_t
+ * Exposure is a blend of integration time, analog gain and dgitial gain
+ * handled by the sensor device driver
+ */
+uint32_t Sensor_getExposure( void );
+
+/**
+ * \brief Get the sensor image size x and y
+ * \param x pointer to variable where x will be written
+ * \param y pointer to variable where y will be written
+ */
+void Sensor_getImageDimensions( SENSOR_IMAGE_SIZE_T *p );
+
+/**
+ * \brief Set the exposure values for I, A, and D 
+ * \param integ integration value 0-15999
+ * \param ana analog value 16000-31999
+ * \param digi digital value 32000-47999
+ * \return SENSOR_RESULT_T
+ */
+SENSOR_RESULT_T Sensor_setupGains( uint32_t integ, uint32_t ana, uint32_t digi );
+
+/**
+ * \brief Set the gain registers directly for I, A, and D - should be used for development only
+ * \param integ integration (0 to 0x378)
+ * \param ana analog value (0x100 to 0xfff)
+ * \param digi digital value (0x1000 to 0xf3ff)
+ * \return SENSOR_RESULT_T
+ */
+SENSOR_RESULT_T Sensor_setDirectGains( uint32_t integ, uint32_t ana, uint32_t digi );
+
+
+/**
+ * \brief Flip between digital gain priority and analog gain priority 
+ * \param ena = true for digital priority
+ */
+void Sensor_setExpDigitalPriority( bool ena );
+
+void Sensor_setTestPattern( bool ena );
+
+#endif // __SENSOR_H__

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="ASCII"?>
+<sdkproject:SdkProject xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:sdkproject="http://www.xilinx.com/sdkproject" name="puck-app" location="C:/WorkSpace/Puck/puck-demo-software/puck-app" platform="C:/WorkSpace/Puck/puck-demo-software/puck96-platform/export/puck96-platform/puck96-platform.xpfm" platformUID="xilinx:ultra96v2::0.0(custom)" systemProject="puck-system" sysConfig="puck96-platform" runtime="C/C++" cpu="standalone_domain" cpuInstance="psu_cortexa53_0" os="standalone" mssSignature="97d1b3fa768c94d0605ced2be811563c">
+  <configuration name="Debug" id="xilinx.gnu.arm.a53.exe.debug.330102056">
+    <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+    <lastBuildOptions xsi:type="sdkproject:SdkOptions"/>
+  </configuration>
+  <configuration name="Release" id="xilinx.gnu.arm.a53.exe.release.1210211519" dirty="true">
+    <configBuildOptions xsi:type="sdkproject:SdkOptions"/>
+  </configuration>
+  <template appTemplateName="empty_application"/>
+</sdkproject:SdkProject>

@@ -1,0 +1,338 @@
+#include "xparameters.h"
+#include "xiicps.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include "xil_printf.h"
+#include "Mask.h"
+#include "Registers.h"
+
+// implementation of a software circle mask
+
+#define CANVAS_X		1280
+#define CANVAS_Y		720
+#define MASK_BASE		0x54000000U
+#define MASK_PAGE0		MASK_BASE
+#define MASK_PAGE1		(MASK_BASE + 0x02000000U)
+#define OSD_LINE_STRIDE 0x2000
+
+#define ROTATION_X		1133
+#define ROTATION_Y		573
+
+// cache these to avoid a calculation if possible
+static uint32_t	m_lineAddr = 0xffffffff;
+static uint32_t	m_line = 0xffffffff;
+static uint32_t m_currPage = MASK_PAGE0;
+
+void Mask_selectPage( int which )
+{
+	if( which == 0 ) {
+		m_currPage = MASK_PAGE0;
+	}
+	else {
+		m_currPage = MASK_PAGE1;
+	}
+}
+
+void Mask_setActive( int which )
+{
+	if( which == 0 ) {
+		Xil_Out32( REG_PAGE_SELECT, MASK_PAGE0 );
+	}
+	else {
+		Xil_Out32( REG_PAGE_SELECT, MASK_PAGE1 );
+	}
+}
+// set all pixels to transparent or opaque
+void Mask_transparency( uint32_t opacity )
+{
+	tOsdPixel pxl;
+	uint32_t yAddr = m_currPage;
+	uint32_t y;
+	uint32_t x;
+	uint32_t pxlAddr = m_currPage;
+	uint32_t alpha;
+
+	if( opacity < 25 ) {
+		alpha = 0;
+	}
+	else if( opacity < 50 ) {
+		alpha = 1;
+	}
+	else if( opacity < 75 ) {
+		alpha = 2;
+	}
+	else {
+		alpha = 3;
+	}
+
+	for( y = 0; y < CANVAS_Y; y++ ) {
+		for( x = 0; x < CANVAS_X; x++ ) {
+			pxl.bits = Xil_In32( pxlAddr );
+			pxl.components.alpha = alpha;
+			Xil_Out32( pxlAddr, pxl.bits );
+			pxlAddr += sizeof( tOsdPixel);
+		}
+		yAddr += OSD_LINE_STRIDE;
+		pxlAddr = yAddr;
+	}
+}
+
+void Mask_drawHorizontalLine( uint32_t x1, uint32_t x2, uint32_t line, tOsdPixel data )
+{
+	uint32_t x;
+
+	for( x = x1; x < x2; x++ ) {
+		Mask_setPixel( x, line, data );
+	}
+}
+
+void Mask_drawLine( uint32_t x1, uint32_t y1, uint32_t x2, uint32_t y2, uint32_t r, uint32_t g, uint32_t b, uint32_t t )
+{
+	uint32_t x;
+	tOsdPixel px;
+	float slope;
+	uint32_t y;
+
+	px.components.red = r;
+	px.components.green = g;
+	px.components.blue = b;
+	px.components.alpha = t;
+
+	if( y1 == y2 ) {		// horizontal line
+		Mask_drawHorizontalLine( x1, x2, y1, px );
+		return;
+	}
+	if( x2 == x1 ) {		// draw vertical line
+		for( y = y1; y < y2; y++ ) {
+			Mask_setPixel( x1, y, px );
+		}
+	}
+	else {
+		slope= ((float)y2-(float)y1) / ((float)x2-(float)x1);
+		for( x = x1; x <= x2; x++ ) {
+			y = (uint32_t)(slope * (float)(x-x1) + (float)y1);
+			Mask_setPixel( x, y, px );
+		}
+	}
+}
+
+void Mask_stairStep( uint32_t x, uint32_t y1, uint32_t y2, uint32_t r, uint32_t g, uint32_t b, uint32_t t )
+{
+	uint32_t 	y;
+
+	for( y = y1; y < y2; y++) {
+		Mask_setPixelRGB( x++, y, r, g, b, t);
+	}
+}
+
+void Mask_setPixel( int32_t x, int32_t y, tOsdPixel color )
+{
+	if( x >= CANVAS_X ) {
+		x = CANVAS_X - 1;
+	}
+	if( y >= CANVAS_Y ) {
+		y = CANVAS_Y - 1;
+	}
+
+	if( y != m_line ) {
+		m_line = y;
+		m_lineAddr = m_currPage + y * OSD_LINE_STRIDE;
+	}
+	Xil_Out32( m_lineAddr + x * sizeof( tOsdPixel ), color.bits );
+}
+
+void Mask_setPixelRGB( int32_t x, int32_t y, uint32_t r, uint32_t g, uint32_t b, uint32_t t )
+{
+	tOsdPixel px;
+
+	px.components.red = r;
+	px.components.green = g;
+	px.components.blue = b;
+	px.components.alpha = t;
+
+	if( x >= CANVAS_X ) {
+		x = CANVAS_X - 1;
+	}
+	if( y >= CANVAS_Y ) {
+		y = CANVAS_Y - 1;
+	}
+
+	if( y != m_line ) {
+		m_line = y;
+		m_lineAddr = m_currPage + y * OSD_LINE_STRIDE;
+	}
+	Xil_Out32( m_lineAddr + x * sizeof( tOsdPixel ), px.bits );
+}
+
+// Draw an orthogonal rectangle
+void Mask_drawRectangleOrthogonal( int32_t xofs, int32_t yofs, int32_t xsize, int32_t ysize, tOsdPixel color )
+{
+	int32_t y;
+
+	for( y = yofs; y < yofs + ysize; y++ ) {
+		Mask_drawHorizontalLine( xofs, xofs + xsize, y, color);
+	}
+}
+
+// Draw an orthogonal rectangle with broken down r, g, b, t
+void Mask_drawRectangleOrthogonalRGB( int32_t xofs, int32_t yofs, int32_t xsize, int32_t ysize, uint32_t r, uint32_t g, uint32_t b, uint32_t t )
+{
+	tOsdPixel px;
+
+	px.components.red = r;
+	px.components.green = g;
+	px.components.blue = b;
+	px.components.alpha = t;
+
+	Mask_drawRectangleOrthogonal( xofs, yofs, xsize, ysize, px );
+}
+
+//set entire OSD to a known color/transparency
+void Mask_clear(  uint32_t transparency )
+{
+	uint32_t y;
+	tOsdPixel color;
+
+	color.bits = 0x00000000;
+	color.components.alpha = transparency;
+	for( y = 0; y <= CANVAS_Y; y++ ){
+		Mask_drawHorizontalLine( 0, CANVAS_X, y, color );
+	}
+}
+
+void Mask_drawCircle( int32_t x, int32_t y, int32_t radius, bool fill, uint32_t r, uint32_t g, uint32_t b, uint32_t t )
+{
+	int x1 = 0;
+	int y1 = radius;
+	float dp = 3 - 2*radius;
+	tOsdPixel pxl;
+
+	pxl.bits = 0;
+	pxl.components.red = r;
+	pxl.components.green = g;
+	pxl.components.blue = b;
+	pxl.components.alpha = t;
+
+	while( x1 <= y1 ) {
+		if( dp <= 0 ) {
+			dp += (4 * x1) + 6;
+		}
+		else {
+			dp += 4 * (x1 - y1) + 10;
+			y1--;
+		}
+		x1++;
+		Mask_setPixel( x1+x, y1+y, pxl);
+		Mask_setPixel( x1+x, y-y1, pxl);
+		Mask_setPixel( x-x1, y1+y, pxl);
+		Mask_setPixel( x-x1, y-y1, pxl);
+		if( fill ) {
+			Mask_drawHorizontalLine( x-x1, x+x1, y1+y, pxl);
+			Mask_drawHorizontalLine( x-x1, x+x1, y-y1, pxl);
+		}
+		Mask_setPixel( x+y1, y+x1, pxl);
+		Mask_setPixel( x+y1, y-x1, pxl);
+		Mask_setPixel( x-y1, y+x1, pxl);
+		Mask_setPixel( x-y1, y-x1, pxl);
+		if( fill ) {
+			Mask_drawHorizontalLine( x-y1, x+y1, y+x1, pxl);
+			Mask_drawHorizontalLine( x-y1, x+y1, y-x1, pxl);
+		}
+	}
+	if( fill ) {
+		Mask_drawHorizontalLine( x-radius, x+radius, y, pxl);
+	}
+
+}
+	// draw a white block
+void Mask_drawBitmap( int xofs, int yofs, int xsize, int ysize, tBitDepth bpp, const unsigned char *bitmap, uint32_t transparency)
+{
+	int x, y;
+	tOsdPixel pxl;
+	int bmpPxlDex = 0;
+	int pad = (4 - ((xsize * bpp) % 4 )) % 4;
+
+	pxl.components.alpha = transparency;
+
+	for( y = ysize; y; y-- ) {
+		for( x = 0; x < xsize; x++ ) {
+			pxl.components.blue = bitmap[bmpPxlDex++] << 2;
+			pxl.components.green = bitmap[bmpPxlDex++] << 2;
+			pxl.components.red = bitmap[bmpPxlDex++] << 2;
+			Mask_setPixel( x+xofs, y+yofs, pxl);
+			if( bpp == BPP_32 ) {
+				bmpPxlDex++;
+			}
+		}
+		bmpPxlDex+=pad;
+	}
+}
+
+void Mask_buildTestPattern()
+{
+	Mask_selectPage( TEST_PATTERN );
+	Mask_drawRectangleOrthogonalRGB( 0, 0, 180, 720, 1023, 1023, 1023, ALL_OSD );
+	Mask_drawRectangleOrthogonalRGB( 180, 0, 180, 720, 1023, 1023, 0, ALL_OSD );
+	Mask_drawRectangleOrthogonalRGB( 360, 0, 180, 720, 0, 1023, 1023, ALL_OSD );
+	Mask_drawRectangleOrthogonalRGB( 540, 0, 180, 720, 0, 1023, 0, ALL_OSD );
+	Mask_drawRectangleOrthogonalRGB( 720, 0, 180, 720, 1023, 0, 1023, ALL_OSD );
+	Mask_drawRectangleOrthogonalRGB( 900, 0, 180, 720, 1023, 0, 0, ALL_OSD );
+	Mask_drawRectangleOrthogonalRGB( 1080, 0, 200, 720, 0, 0, 1023, ALL_OSD );
+}
+
+void Mask_buildLivePage()
+{
+	Mask_selectPage( LIVE_VIDEO );
+	Mask_clear( ALL_OSD );
+	Mask_drawCircle( 639,359,355,true,0,0,0,ALL_VIDEO);
+}
+
+void Mask_rotationIndicator( int num )
+{
+	const unsigned char *bmp;
+
+	switch( num ) {
+		case 1:
+		case 2:
+		case 4:
+		case 5:
+		case 7:
+		case 8:
+		case 10:
+		case 11:
+		default:
+			return;
+		case 12:
+			break;
+		case 3:
+			break;
+		case 6:
+			break;
+		case 9:
+			break;
+	}
+}
+
+void Mask_enable( bool ena )
+{
+	Xil_Out32( REG_OSD_EN, !ena );
+}
+
+void Mask_init( void )
+{
+	u32 DeStart = VAL_TESTPAT_VSYNC_STOP_LINE;
+	u32 DeStop  = 0x507;  // Need to move 1 pixel to the left to compensate for moving START
+
+	// DE Start
+	Xil_Out32( REG_TESTPAT_VSYNC_STOP_LINE, DeStart );	// remove column of crap at right edge
+
+	// DE Stop
+	Xil_Out32( REG_TESTPAT_HSYNC_RISING_EDGE_PX, DeStop );	// remove column of crap at right edge
+
+	Mask_buildLivePage();
+	Mask_buildTestPattern();
+	Mask_selectPage( LIVE_VIDEO );
+	Mask_setActive( LIVE_VIDEO );
+	Mask_enable( true );
+	Xil_Out32( REG_VIDEO_CENTER_OFFSET, 278 );
+}

@@ -1,0 +1,77 @@
+/******************************************************************************
+* Copyright (C) 2005 - 2020 Xilinx, Inc.  All rights reserved.
+* SPDX-License-Identifier: MIT
+******************************************************************************/
+#ifndef __XUART_H__
+#define __XUART_H__
+
+/****************************************************************************/
+/**
+*
+* @file xuart.h
+*
+**/
+/***************************** Include Files *********************************/
+
+#include "xparameters.h"
+#include "xuartlite.h"
+#include "xil_printf.h"
+
+/*****************************************************************************/
+/**
+*
+* This function does a minimal test on the UartLite device and driver
+*
+* @param	None
+*
+* @return	XST_SUCCESS if successful, otherwise XST_FAILURE.
+*
+* @note		None.
+*
+****************************************************************************/
+int XUART_init();
+
+/*****************************************************************************/
+/**
+*
+* This function returns whether a character is available and the character itself
+*
+* @param	pointer where to place the character read
+*
+* @return	true if a character is read
+*
+* @note		None.
+*
+****************************************************************************/
+bool XUART_hitc( uint8_t *character );
+
+/*****************************************************************************/
+/**
+*
+* send a buffer out the UART
+* IT will block until all characters have gone
+*
+* @param	buffer pointer
+* @param	length
+*
+* @note		None.
+*
+****************************************************************************/
+uint32_t XUART_send( uint8_t *data, uint32_t length );
+void XUART_sendByte( uint8_t data );
+
+/*****************************************************************************/
+/**
+*
+* check if the UART is sending
+*
+* @param	none
+*
+* @return	true if busy
+*
+* @note		None.
+*
+****************************************************************************/
+bool XUART_sendBusy();
+
+#endif
